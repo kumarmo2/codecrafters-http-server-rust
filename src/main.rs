@@ -1,12 +1,27 @@
-use std::net::TcpListener;
+use std::{net::TcpListener, thread};
+
+use crate::http::HttpResponse;
+mod http;
+mod thread_pool;
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+    let thread_pool = thread_pool::ThreadPool::new(5);
+    let pool = thread_pool.clone();
+    thread::spawn(move || {
+        thread_pool.start();
+    });
 
     for stream in listener.incoming() {
         match stream {
-            Ok(_stream) => {
-                println!("accepted new connection");
+            Ok(mut _stream) => {
+                pool.run(Box::new(move || {
+                    let response = HttpResponse::default();
+                    match response.write(&mut _stream) {
+                        Ok(_) => {}
+                        Err(e) => eprintln!("{}", e),
+                    }
+                }));
             }
             Err(e) => {
                 println!("error: {}", e);
