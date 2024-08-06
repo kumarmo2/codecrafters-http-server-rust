@@ -6,11 +6,9 @@ mod thread_pool;
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
-    let thread_pool = thread_pool::ThreadPool::new(5);
-    let pool = thread_pool.clone();
-    thread::spawn(move || {
-        thread_pool.start();
-    });
+    let thread_pool = thread_pool::ThreadPoolBuilder {}.build();
+    // let pool = thread_pool.clone();
+    let pool = thread_pool.start();
 
     for stream in listener.incoming() {
         match stream {
