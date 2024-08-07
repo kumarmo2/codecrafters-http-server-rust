@@ -15,6 +15,8 @@ pub(crate) struct Started;
 pub(crate) struct ThreadPool<T> {
     _phantom: PhantomData<T>,
     capacity: usize,
+    // damn these Arc<Mutex<_>>. they creep everywhere. is this the promise of "Feareless Concurrency" or is it just Skill
+    // issue?
     end_chan: (Sender<()>, Arc<Mutex<Receiver<()>>>),
     worker_chan: (
         Sender<Box<dyn FnOnce() + Send>>,

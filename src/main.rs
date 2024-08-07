@@ -1,5 +1,7 @@
 use std::{net::TcpListener, thread};
 
+use http::HttpResponseBuilder;
+
 use crate::http::{http_request::HttpRequest, HttpResponse};
 mod http;
 mod thread_pool;
@@ -13,8 +15,21 @@ fn main() {
         match stream {
             Ok(mut _stream) => {
                 pool.run(Box::new(move || {
-                    let response = HttpResponse::default();
-                    HttpRequest::create_from_tcp_stream(&mut _stream);
+                    // let response = HttpResponse::default();
+                    let request = match HttpRequest::create_from_tcp_stream(&mut _stream) {
+                        Ok(req) => req,
+                        Err(_) => {
+                            let response = HttpResponseBuilder::new(500).build();
+                            match response.write(&mut _stream) {
+                                Ok(_) => {}
+                                Err(e) => eprintln!("{}", e),
+                            }
+                            return;
+                        }
+                    };
+                    let path = &request.path;
+                    let status_code: u16 = if path == "/" { 200 } else { 404 };
+                    let response = HttpResponseBuilder::new(status_code).build();
                     match response.write(&mut _stream) {
                         Ok(_) => {}
                         Err(e) => eprintln!("{}", e),
