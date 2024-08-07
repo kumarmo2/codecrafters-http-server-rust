@@ -1,8 +1,9 @@
 #![allow(unused_variables)]
 
-use std::net::TcpListener;
+use std::{net::TcpListener, sync::Arc};
 
 use http::{ContentTypeHttpResponse, Headers, HttpResponseBuilder};
+use itertools::Itertools;
 use nom::AsBytes;
 
 use crate::http::{http_request::HttpRequest, HttpResponse};
@@ -32,9 +33,26 @@ fn handle_user_agent_endpoint(req: &HttpRequest) -> ContentTypeHttpResponse {
     }
 }
 
-fn handle_request(req: HttpRequest) -> HttpResponse {
+fn handle_file_endpoint(
+    req: &HttpRequest,
+    file_name: &str,
+    state: Arc<State>,
+) -> ContentTypeHttpResponse {
+    let directory = match state.directory.as_ref() {
+        Some(dir) => dir,
+        None => return ContentTypeHttpResponse::NoBody(HttpResponse::default()),
+    };
+    let file_path = format!("/{directory}/{file_name}");
+    match std::fs::read(file_path) {
+        Ok(content) => {
+            ContentTypeHttpResponse::File(HttpResponseBuilder::new(200).with_body(content).build())
+        }
+        Err(_) => ContentTypeHttpResponse::NoBody(HttpResponseBuilder::new(404).build()),
+    }
+}
+
+fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
     let path = &req.path;
-    println!("path: {}", path);
 
     let response = {
         let path_splits = path.split("/").collect::<Vec<_>>();
@@ -46,6 +64,8 @@ fn handle_request(req: HttpRequest) -> HttpResponse {
             handle_echo_endpoint(&req, path_splits[2])
         } else if path_splits.len() >= 2 && path_splits[1] == "user-agent" {
             handle_user_agent_endpoint(&req)
+        } else if path_splits.len() >= 3 && path_splits[1] == "files" {
+            handle_file_endpoint(&req, path_splits[2], state.clone())
         } else {
             let status_code: u16 = if path == "/" { 200 } else { 404 };
             let response = HttpResponseBuilder::new(status_code).build();
@@ -53,24 +73,21 @@ fn handle_request(req: HttpRequest) -> HttpResponse {
         }
     };
 
-    let mut response = match response {
-        ContentTypeHttpResponse::Json(_) => {
-            unimplemented!("ContentTypeHttpResponse::Json");
-        }
-        ContentTypeHttpResponse::PlainText(mut response) => {
-            match response.header.as_mut() {
-                Some(header) => {
-                    header.insert("Content-Type".to_string(), "text/plain".to_string());
-                }
-                None => {
-                    let mut header = Headers::new();
-                    header.insert("Content-Type".to_string(), "text/plain".to_string());
-                    response.header = Some(header);
-                }
+    let mut response = if let Some(content_type) = response.get_content_type_header_value() {
+        let mut response = response.into_inner();
+        match response.header.as_mut() {
+            Some(header) => {
+                header.insert("Content-Type".to_string(), content_type.to_string());
             }
-            response
+            None => {
+                let mut header = Headers::new();
+                header.insert("Content-Type".to_string(), content_type.to_string());
+                response.header = Some(header);
+            }
         }
-        ContentTypeHttpResponse::NoBody(response) => response,
+        response
+    } else {
+        response.into_inner()
     };
 
     if let Some(body) = &response.body {
@@ -88,14 +105,27 @@ fn handle_request(req: HttpRequest) -> HttpResponse {
     }
     response
 }
+
+struct State {
+    directory: Option<String>,
+}
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
     let thread_pool = thread_pool::ThreadPoolBuilder {}.build();
     let pool = thread_pool.start();
+    let args = std::env::args();
+    let args = args.collect::<Vec<_>>();
+    let mut state = State { directory: None };
+    if let Some((pos, _)) = args.iter().find_position(|a| *a == "--directory") {
+        println!("pos: {:?}, directory: {} ", pos, args[pos + 1]);
+        state.directory = Some(args[pos + 1].to_string());
+    }
+    let state = Arc::new(state);
 
     for stream in listener.incoming() {
         match stream {
             Ok(mut _stream) => {
+                let state = state.clone();
                 pool.run(Box::new(move || {
                     // let response = HttpResponse::default();
                     let request = match HttpRequest::create_from_tcp_stream(&mut _stream) {
@@ -109,7 +139,7 @@ fn main() {
                             return;
                         }
                     };
-                    let response = handle_request(request);
+                    let response = handle_request(request, state);
                     match response.write(&mut _stream) {
                         Ok(_) => {}
                         Err(e) => eprintln!("{}", e),

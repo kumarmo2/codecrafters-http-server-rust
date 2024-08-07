@@ -37,6 +37,26 @@ pub(crate) enum ContentTypeHttpResponse {
     Json(HttpResponse),
     PlainText(HttpResponse),
     NoBody(HttpResponse),
+    File(HttpResponse),
+}
+
+impl ContentTypeHttpResponse {
+    pub(crate) fn get_content_type_header_value(&self) -> Option<&'static str> {
+        match self {
+            ContentTypeHttpResponse::Json(_) => Some("application/json"),
+            ContentTypeHttpResponse::PlainText(_) => Some("text/plain"),
+            ContentTypeHttpResponse::NoBody(_) => None,
+            ContentTypeHttpResponse::File(_) => Some("application/octet-stream"),
+        }
+    }
+    pub(crate) fn into_inner(self) -> HttpResponse {
+        match self {
+            ContentTypeHttpResponse::Json(response) => response,
+            ContentTypeHttpResponse::PlainText(response) => response,
+            ContentTypeHttpResponse::NoBody(response) => response,
+            ContentTypeHttpResponse::File(response) => response,
+        }
+    }
 }
 
 #[derive(Debug)]
