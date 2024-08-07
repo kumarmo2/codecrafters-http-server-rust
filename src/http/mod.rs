@@ -7,11 +7,11 @@ use std::{
 };
 
 #[derive(Debug)]
-pub(crate) struct Header {
+pub(crate) struct Headers {
     map: HashMap<String, String>,
 }
 
-impl Header {
+impl Headers {
     pub(crate) fn new() -> Self {
         Self {
             map: HashMap::default(),
@@ -19,7 +19,7 @@ impl Header {
     }
 }
 
-impl Deref for Header {
+impl Deref for Headers {
     type Target = HashMap<String, String>;
 
     fn deref(&self) -> &Self::Target {
@@ -27,7 +27,7 @@ impl Deref for Header {
     }
 }
 
-impl DerefMut for Header {
+impl DerefMut for Headers {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.map
     }
@@ -42,7 +42,7 @@ pub(crate) enum ContentTypeHttpResponse {
 #[derive(Debug)]
 pub(crate) struct HttpResponse {
     status_code: u16,
-    pub(crate) header: Option<Header>,
+    pub(crate) header: Option<Headers>,
     pub(crate) body: Option<Vec<u8>>, // TODO: see if we can replace body with some type which doesn't need to
                                       // allocate memory on heap.
 }
@@ -59,7 +59,7 @@ impl Default for HttpResponse {
 
 pub(crate) struct HttpResponseBuilder {
     status_code: u16,
-    header: Option<Header>,
+    header: Option<Headers>,
     body: Option<Vec<u8>>, // TODO: see if we can replace body with some type which doesn't need to
 }
 
@@ -72,7 +72,7 @@ impl HttpResponseBuilder {
         }
     }
 
-    pub(crate) fn with_header(mut self, header: Header) -> Self {
+    pub(crate) fn with_header(mut self, header: Headers) -> Self {
         self.header = Some(header);
         self
     }

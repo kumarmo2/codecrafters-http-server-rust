@@ -1,6 +1,8 @@
-use std::{net::TcpListener, thread};
+#![allow(unused_variables)]
 
-use http::{ContentTypeHttpResponse, Header, HttpResponseBuilder};
+use std::net::TcpListener;
+
+use http::{ContentTypeHttpResponse, Headers, HttpResponseBuilder};
 use nom::AsBytes;
 
 use crate::http::{http_request::HttpRequest, HttpResponse};
@@ -10,9 +12,24 @@ mod thread_pool;
 fn handle_echo_endpoint(req: &HttpRequest, path_str: &str) -> ContentTypeHttpResponse {
     let body = path_str.as_bytes().to_vec();
     let response = HttpResponseBuilder::new(200).with_body(body).build();
-    println!("response: {:?}", response);
 
     ContentTypeHttpResponse::PlainText(response)
+}
+
+fn handle_user_agent_endpoint(req: &HttpRequest) -> ContentTypeHttpResponse {
+    match req.headers.as_ref() {
+        Some(headers) => {
+            if let Some(val) = headers.get("User-Agent") {
+                let body = val.as_bytes().to_vec();
+                ContentTypeHttpResponse::PlainText(
+                    HttpResponseBuilder::new(200).with_body(body).build(),
+                )
+            } else {
+                ContentTypeHttpResponse::NoBody(HttpResponse::default())
+            }
+        }
+        None => ContentTypeHttpResponse::NoBody(HttpResponse::default()),
+    }
 }
 
 fn handle_request(req: HttpRequest) -> HttpResponse {
@@ -27,6 +44,8 @@ fn handle_request(req: HttpRequest) -> HttpResponse {
             // `3` is given assuming the path
             // always starts with `/`. Most probably this assumption is wrong
             handle_echo_endpoint(&req, path_splits[2])
+        } else if path_splits.len() >= 2 && path_splits[1] == "user-agent" {
+            handle_user_agent_endpoint(&req)
         } else {
             let status_code: u16 = if path == "/" { 200 } else { 404 };
             let response = HttpResponseBuilder::new(status_code).build();
@@ -37,23 +56,14 @@ fn handle_request(req: HttpRequest) -> HttpResponse {
     let mut response = match response {
         ContentTypeHttpResponse::Json(_) => {
             unimplemented!("ContentTypeHttpResponse::Json");
-            // match response.header.as_mut()
-            //     Some(header) => {
-            //         header.insert("Content-Type".to_string(), "text/plain".to_string());
-            //     }
-            //     None => {
-            //         let mut header = Header::new();
-            //         header.insert("Content-Type".to_string(), "text/plain".to_string());
-            //         response.header = Some(header);
-            //     }
         }
         ContentTypeHttpResponse::PlainText(mut response) => {
             match response.header.as_mut() {
-                Some(mut header) => {
+                Some(header) => {
                     header.insert("Content-Type".to_string(), "text/plain".to_string());
                 }
                 None => {
-                    let mut header = Header::new();
+                    let mut header = Headers::new();
                     header.insert("Content-Type".to_string(), "text/plain".to_string());
                     response.header = Some(header);
                 }
@@ -70,7 +80,7 @@ fn handle_request(req: HttpRequest) -> HttpResponse {
                 header.insert("Content-Length".to_string(), body_len.to_string());
             }
             None => {
-                let mut header = Header::new();
+                let mut header = Headers::new();
                 header.insert("Content-Length".to_string(), body_len.to_string());
                 response.header = Some(header);
             }

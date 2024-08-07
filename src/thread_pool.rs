@@ -62,7 +62,7 @@ impl ThreadPool<NotStarted> {
                 });
             }
             let guard = pool.end_chan.1.lock().unwrap();
-            guard.recv();
+            let _ = guard.recv();
         });
         ThreadPool {
             _phantom: PhantomData,

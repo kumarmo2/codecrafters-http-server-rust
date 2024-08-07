@@ -1,3 +1,4 @@
+#![allow(unused_variables)]
 use core::str;
 use nom::{
     branch::alt,
@@ -8,12 +9,12 @@ use nom::{
     IResult,
 };
 use std::{
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader},
     net::TcpStream,
     str::FromStr,
 };
 
-use super::Header;
+use super::Headers;
 
 #[derive(Clone, Debug)]
 enum Method {
@@ -39,7 +40,7 @@ impl Method {
 pub(crate) struct HttpRequest {
     method: Method,
     pub(crate) path: String,
-    headers: Option<Header>,
+    pub(crate) headers: Option<Headers>,
 }
 
 fn parse_method(input: &[u8]) -> IResult<&[u8], Method> {
@@ -68,6 +69,16 @@ fn capture_all_till_and_including_space(input: &[u8]) -> IResult<&[u8], &[u8]> {
     terminated(take_until(" "), tag(" "))(input)
 }
 
+fn capture_all_till_and_including_crlf(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    terminated(take_until("\r\n"), tag("\r\n"))(input)
+}
+fn capture_all_till_and_including_termination_character<'a>(
+    input: &'a [u8],
+    termination_bytes: &'a [u8],
+) -> IResult<&'a [u8], &'a [u8]> {
+    terminated(take_until(termination_bytes), tag(termination_bytes))(input)
+}
+
 impl HttpRequest {
     pub(crate) fn create_from_tcp_stream(
         stream: &mut TcpStream,
@@ -83,7 +94,7 @@ impl HttpRequest {
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
-        println!("method: {:?}, buf_len: {len}", method, len = buf.len());
+        // println!("method: {:?}, buf_len: {len}", method, len = buf.len());
 
         let (rest, _) = skip_whitespaces0(rest).map_err(|_| "error while scaping spaces")?;
 
@@ -96,17 +107,62 @@ impl HttpRequest {
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
-        println!(
-            "path_bytes: {:?}, buf_len: {len}",
-            path_bytes,
-            len = buf.len()
-        );
-
         let path = String::from_str(str::from_utf8(path_bytes)?)?;
+
+        let (rest, _) = skip_whitespaces0(rest).map_err(|_| "error while scaping spaces")?;
+
+        bytes_read_from_curr_buff = buf.len() - rest.len();
+        _total_bytes_read += bytes_read_from_curr_buff;
+
+        let (rest, _http_version) = capture_all_till_and_including_crlf(rest)
+            .map_err(|_| "error while parsing http version")?;
+
+        bytes_read_from_curr_buff = buf.len() - rest.len();
+        _total_bytes_read += bytes_read_from_curr_buff;
+
+        let mut headers = Headers::new();
+
+        let mut bytes_read_from_header: usize = 0;
+        loop {
+            // println!("...., {rest_len}", rest_len = rest.len());
+            let (loop_rest, captured_header) =
+                capture_all_till_and_including_crlf(&rest[bytes_read_from_header..])
+                    .map_err(|_| "error while capturing header")?;
+
+            bytes_read_from_header = rest.len() - loop_rest.len();
+            bytes_read_from_curr_buff = buf.len() - loop_rest.len();
+            _total_bytes_read += bytes_read_from_curr_buff;
+            if captured_header.len() == 0 {
+                break;
+            }
+            if captured_header.len() == 2 {
+                // Found just the crlf
+                break;
+            }
+            let (header_rest, key_bytes) =
+                capture_all_till_and_including_termination_character(captured_header, b":")
+                    .unwrap();
+            let (header_rest, _) = skip_whitespaces0(header_rest).unwrap();
+            let value_bytes = &header_rest[..];
+            let key = String::from_str(str::from_utf8(key_bytes)?)?;
+            let val = String::from_str(str::from_utf8(value_bytes)?)?;
+            // println!("header, key: {key}, val: {val}");
+            headers.insert(key, val);
+        }
+        let rest = &rest[bytes_read_from_header..];
+
+        let headers = if headers.keys().len() > 0 {
+            Some(headers)
+        } else {
+            None
+        };
+
+        println!("headers: {:?}", headers);
+
         Ok(Self {
             method,
             path,
-            headers: None,
+            headers,
         })
 
         // nom::bytes::complete::
