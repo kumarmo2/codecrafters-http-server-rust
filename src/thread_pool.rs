@@ -72,7 +72,7 @@ impl ThreadPool<NotStarted> {
 }
 
 impl ThreadPool<Started> {
-    pub(crate) fn run(&self, f: Box<dyn FnOnce() -> () + Send>) {
+    pub(crate) fn run(&self, f: Box<dyn FnOnce() + Send>) {
         let (tx, _) = &self.worker_chan;
         tx.send(f).unwrap();
     }

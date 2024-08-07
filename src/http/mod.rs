@@ -1,5 +1,5 @@
 #![allow(dead_code, unused_assignments)]
-
+pub(crate) mod http_request;
 use std::io::Write;
 
 #[derive(Debug)]
