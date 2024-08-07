@@ -2,9 +2,8 @@
 
 use std::{net::TcpListener, sync::Arc};
 
-use http::{ContentTypeHttpResponse, Headers, HttpResponseBuilder};
+use http::{http_request::Method, ContentTypeHttpResponse, Headers, HttpResponseBuilder};
 use itertools::Itertools;
-use nom::AsBytes;
 
 use crate::http::{http_request::HttpRequest, HttpResponse};
 mod http;
@@ -51,6 +50,26 @@ fn handle_file_endpoint(
     }
 }
 
+fn handle_file_upload_endpoint(
+    req: &HttpRequest,
+    file_name: &str,
+    state: Arc<State>,
+) -> ContentTypeHttpResponse {
+    let directory = match state.directory.as_ref() {
+        Some(dir) => dir,
+        None => return ContentTypeHttpResponse::NoBody(HttpResponse::default()),
+    };
+    let body = match req.body.as_ref() {
+        Some(body) => body,
+        None => return ContentTypeHttpResponse::NoBody(HttpResponse::default()),
+    };
+    let file_path = format!("/{directory}/{file_name}");
+    match std::fs::write(file_path, body) {
+        Ok(_) => ContentTypeHttpResponse::NoBody(HttpResponseBuilder::new(201).build()),
+        Err(_) => ContentTypeHttpResponse::NoBody(HttpResponseBuilder::new(500).build()),
+    }
+}
+
 fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
     let path = &req.path;
 
@@ -65,7 +84,10 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
         } else if path_splits.len() >= 2 && path_splits[1] == "user-agent" {
             handle_user_agent_endpoint(&req)
         } else if path_splits.len() >= 3 && path_splits[1] == "files" {
-            handle_file_endpoint(&req, path_splits[2], state.clone())
+            match req.method {
+                Method::Post => handle_file_upload_endpoint(&req, path_splits[2], state.clone()),
+                _ => handle_file_endpoint(&req, path_splits[2], state.clone()),
+            }
         } else {
             let status_code: u16 = if path == "/" { 200 } else { 404 };
             let response = HttpResponseBuilder::new(status_code).build();
@@ -91,7 +113,7 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
     };
 
     if let Some(body) = &response.body {
-        let body_len = body.as_bytes().len();
+        let body_len = body.len();
         match response.header.as_mut() {
             Some(header) => {
                 header.insert("Content-Length".to_string(), body_len.to_string());

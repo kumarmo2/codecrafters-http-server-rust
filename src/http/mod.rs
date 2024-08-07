@@ -115,7 +115,9 @@ impl HttpResponse {
     fn get_http_method_contents_to_write(status_code: u16) -> (String, &'static str) {
         match status_code {
             200 => (200.to_string(), " OK"), //  TODO: if possible, remove the heap allocation for
+            201 => (201.to_string(), " Created"),
             404 => (404.to_string(), " Not Found"),
+            500 => (500.to_string(), " Internal Server Error"),
             // the string
             x => unimplemented!("unhandled status_code: {x}"),
         }

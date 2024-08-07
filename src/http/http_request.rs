@@ -17,7 +17,7 @@ use std::{
 use super::Headers;
 
 #[derive(Clone, Debug)]
-enum Method {
+pub(crate) enum Method {
     Get,
     Post,
     Put,
@@ -38,9 +38,10 @@ impl Method {
 }
 
 pub(crate) struct HttpRequest {
-    method: Method,
+    pub(crate) method: Method,
     pub(crate) path: String,
     pub(crate) headers: Option<Headers>,
+    pub(crate) body: Option<Vec<u8>>,
 }
 
 fn parse_method(input: &[u8]) -> IResult<&[u8], Method> {
@@ -150,19 +151,38 @@ impl HttpRequest {
             headers.insert(key, val);
         }
         let rest = &rest[bytes_read_from_header..];
+        let mut request_body_bytes_to_read: usize = 0;
 
         let headers = if headers.keys().len() > 0 {
+            // NOTE: only if `Content-Length` header is present, we will read the body.
+            if let Some(val_str) = headers.get("Content-Length") {
+                request_body_bytes_to_read = val_str.parse::<usize>().unwrap(); // TODO: definitely need to remove this unwrap;
+            }
             Some(headers)
         } else {
             None
         };
-
         println!("headers: {:?}", headers);
 
+        if request_body_bytes_to_read == 0 {
+            return Ok(Self {
+                method,
+                path,
+                headers,
+                body: None,
+            });
+        }
+
+        if rest.len() < request_body_bytes_to_read {
+            todo!(" need to read further bytes from the stream to fill the body, rest_len: {rest_len}, request_body_bytes_to_read: {request_body_bytes_to_read}", rest_len = rest.len());
+        }
+        let body = rest[0..request_body_bytes_to_read].to_vec();
+        println!("body: {:?}", body);
         Ok(Self {
             method,
             path,
             headers,
+            body: Some(body),
         })
 
         // nom::bytes::complete::
