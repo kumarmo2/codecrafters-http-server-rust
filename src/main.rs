@@ -1,8 +1,11 @@
 #![allow(unused_variables)]
 
-use std::{net::TcpListener, sync::Arc};
+use std::{ascii::AsciiExt, net::TcpListener, sync::Arc};
 
-use http::{http_request::Method, ContentTypeHttpResponse, Headers, HttpResponseBuilder};
+use http::{
+    http_request::Method, ContentTypeHttpResponse, Headers, HttpResponseBuilder,
+    CONTENT_ENCODING_HEADER, SUPPORTED_ENCODINGS,
+};
 use itertools::Itertools;
 
 use crate::http::{http_request::HttpRequest, HttpResponse};
@@ -70,6 +73,30 @@ fn handle_file_upload_endpoint(
     }
 }
 
+fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) {
+    let Some(headers) = req.headers.as_ref() else {
+        return;
+    };
+    let Some(val) = headers.get(http::ACCEPT_ENCODING_HEADER) else {
+        return;
+    };
+    let client_supported_encoding = val.trim();
+    let Some(encoding) = SUPPORTED_ENCODINGS
+        .iter()
+        .find(|e| e.eq_ignore_ascii_case(client_supported_encoding))
+    else {
+        return;
+    };
+
+    if let Some(headers) = response.header.as_mut() {
+        headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
+    } else {
+        let mut headers = Headers::new();
+        headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
+        response.header = Some(headers);
+    }
+}
+
 fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
     let path = &req.path;
 
@@ -111,6 +138,8 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
     } else {
         response.into_inner()
     };
+
+    handle_encoding(&req, &mut response);
 
     if let Some(body) = &response.body {
         let body_len = body.len();

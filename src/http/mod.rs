@@ -6,6 +6,10 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+pub(crate) const ACCEPT_ENCODING_HEADER: &'static str = "Accept-Encoding";
+pub(crate) const CONTENT_ENCODING_HEADER: &'static str = "Content-Encoding";
+pub(crate) const SUPPORTED_ENCODINGS: [&'static str; 1] = ["gzip"];
+
 #[derive(Debug)]
 pub(crate) struct Headers {
     map: HashMap<String, String>,
