@@ -80,10 +80,17 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) {
     let Some(val) = headers.get(http::ACCEPT_ENCODING_HEADER) else {
         return;
     };
-    let client_supported_encoding = val.trim();
+    let client_supported_encoding = val.split(",").map(|v| v.trim()).collect::<Vec<_>>(); // TODO:
+                                                                                          // Can we remove this `Vec` heap allocation.
     let Some(encoding) = SUPPORTED_ENCODINGS
         .iter()
-        .find(|e| e.eq_ignore_ascii_case(client_supported_encoding))
+        // .find(|e| e.eq_ignore_ascii_case(client_supported_encoding))
+        .find(|e| {
+            client_supported_encoding
+                .iter()
+                .find(|c| *c == *e)
+                .is_some()
+        })
     else {
         return;
     };
