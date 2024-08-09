@@ -191,7 +191,6 @@ impl HttpRequest {
             todo!(" need to read further bytes from the stream to fill the body, rest_len: {rest_len}, request_body_bytes_to_read: {request_body_bytes_to_read}", rest_len = rest.len());
         }
         let body = rest[0..request_body_bytes_to_read].to_vec();
-        println!("body: {:?}", body);
         Ok(Self {
             method,
             path,

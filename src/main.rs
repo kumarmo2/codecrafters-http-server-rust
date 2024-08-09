@@ -124,7 +124,7 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
 
     let response = {
         let path_splits = path.split("/").collect::<Vec<_>>();
-        println!("path_splits: {:?}", path_splits);
+        // println!("path_splits: {:?}", path_splits);
 
         if path_splits.len() >= 3 && path_splits[1] == "echo" {
             // `3` is given assuming the path
@@ -190,7 +190,6 @@ fn main() {
     let args = args.collect::<Vec<_>>();
     let mut state = State { directory: None };
     if let Some((pos, _)) = args.iter().find_position(|a| *a == "--directory") {
-        println!("pos: {:?}, directory: {} ", pos, args[pos + 1]);
         state.directory = Some(args[pos + 1].to_string());
     }
     let state = Arc::new(state);
@@ -220,7 +219,7 @@ fn main() {
                 }));
             }
             Err(e) => {
-                println!("error: {}", e);
+                // println!("error: {}", e);
             }
         }
     }

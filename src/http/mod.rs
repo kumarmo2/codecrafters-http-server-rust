@@ -137,9 +137,15 @@ impl HttpResponse {
             201 => ("201", " Created"),
             404 => ("404", " Not Found"),
             500 => ("500", " Internal Server Error"),
-            // the string
             x => unimplemented!("unhandled status_code: {x}"),
         }
+    }
+
+    fn copy_to_buf(buf: &mut Vec<u8>, from: &[u8], buf_offset: usize) -> usize {
+        let bytes_to_copy = from.len();
+        let end = buf_offset + bytes_to_copy;
+        buf[buf_offset..end].copy_from_slice(from);
+        bytes_to_copy
     }
 
     pub(crate) fn write<W>(&self, writer: &mut W) -> anyhow::Result<()>
@@ -156,57 +162,50 @@ impl HttpResponse {
             HttpResponse::get_http_method_contents_to_write(self.status_code);
 
         // TODO: before writing the bytes, make sure buf has enough space.
-        buf[bytes_written_to_buf..(bytes_written_to_buf + status_code.len())]
-            .copy_from_slice(status_code.as_bytes());
-        bytes_written_to_buf += status_code.len();
+        bytes_written_to_buf +=
+            HttpResponse::copy_to_buf(&mut buf, status_code.as_bytes(), bytes_written_to_buf);
 
-        buf[bytes_written_to_buf..(bytes_written_to_buf + method_readable_string.len())]
-            .copy_from_slice(method_readable_string.as_bytes());
-        bytes_written_to_buf += method_readable_string.len();
+        bytes_written_to_buf += HttpResponse::copy_to_buf(
+            &mut buf,
+            method_readable_string.as_bytes(),
+            bytes_written_to_buf,
+        );
+        // buf[bytes_written_to_buf..(bytes_written_to_buf + method_readable_string.len())]
+        //     .copy_from_slice(method_readable_string.as_bytes());
+        // bytes_written_to_buf += method_readable_string.len();
 
-        buf[bytes_written_to_buf..(bytes_written_to_buf + 2)].copy_from_slice(b"\r\n"); // 2 bytes
-        bytes_written_to_buf += 2;
+        bytes_written_to_buf += HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
+        // buf[bytes_written_to_buf..(bytes_written_to_buf + 2)].copy_from_slice(b"\r\n"); // 2 bytes
+        // bytes_written_to_buf += 2;
 
         match self.header.as_ref() {
             Some(header) => {
                 for (k, v) in header.iter() {
                     let k_bytes = k.as_bytes();
-                    let k_len = k_bytes.len();
                     let v_bytes = v.as_bytes();
-                    let v_len = v_bytes.len();
 
-                    buf[bytes_written_to_buf..(bytes_written_to_buf + k_len)]
-                        .copy_from_slice(k_bytes);
+                    bytes_written_to_buf +=
+                        HttpResponse::copy_to_buf(&mut buf, k_bytes, bytes_written_to_buf);
 
-                    bytes_written_to_buf += k_len;
+                    bytes_written_to_buf +=
+                        HttpResponse::copy_to_buf(&mut buf, b": ", bytes_written_to_buf);
 
-                    // 2 bytes
-                    buf[bytes_written_to_buf..(bytes_written_to_buf + 2)].copy_from_slice(b": ");
+                    bytes_written_to_buf +=
+                        HttpResponse::copy_to_buf(&mut buf, v_bytes, bytes_written_to_buf);
 
-                    bytes_written_to_buf += 2;
-
-                    buf[bytes_written_to_buf..(bytes_written_to_buf + v_len)]
-                        .copy_from_slice(v_bytes);
-
-                    bytes_written_to_buf += v_len;
-
-                    buf[bytes_written_to_buf..(bytes_written_to_buf + 2)].copy_from_slice(b"\r\n"); // 2 bytes
-                    bytes_written_to_buf += 2;
+                    bytes_written_to_buf +=
+                        HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
                 }
             }
             None => {}
         }
-        buf[bytes_written_to_buf..(bytes_written_to_buf + 2)].copy_from_slice(b"\r\n"); // 2 bytes
-        bytes_written_to_buf += 2;
+        bytes_written_to_buf += HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
+
         if self.body.is_some() {
             match &self.body {
                 Some(body) => {
-                    println!("writing body");
-                    let body_len = body.len();
-                    buf[bytes_written_to_buf..(bytes_written_to_buf + body_len)]
-                        .copy_from_slice(body);
-
-                    bytes_written_to_buf += body_len;
+                    bytes_written_to_buf +=
+                        HttpResponse::copy_to_buf(&mut buf, body, bytes_written_to_buf);
                 }
                 None => {}
             }
