@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_assignments)]
+#![allow(unused_assignments)]
 pub(crate) mod http_request;
 use std::{
     collections::HashMap,
@@ -53,6 +53,7 @@ impl DerefMut for Headers {
 }
 
 pub(crate) enum ContentTypeHttpResponse {
+    #[allow(dead_code)]
     Json(HttpResponse),
     PlainText(HttpResponse),
     NoBody(HttpResponse),
@@ -111,6 +112,7 @@ impl HttpResponseBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_header(mut self, header: Headers) -> Self {
         self.header = Some(header);
         self
@@ -170,13 +172,8 @@ impl HttpResponse {
             method_readable_string.as_bytes(),
             bytes_written_to_buf,
         );
-        // buf[bytes_written_to_buf..(bytes_written_to_buf + method_readable_string.len())]
-        //     .copy_from_slice(method_readable_string.as_bytes());
-        // bytes_written_to_buf += method_readable_string.len();
 
         bytes_written_to_buf += HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
-        // buf[bytes_written_to_buf..(bytes_written_to_buf + 2)].copy_from_slice(b"\r\n"); // 2 bytes
-        // bytes_written_to_buf += 2;
 
         match self.header.as_ref() {
             Some(header) => {
@@ -201,16 +198,17 @@ impl HttpResponse {
         }
         bytes_written_to_buf += HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
 
+        writer.write_all(&buf[0..bytes_written_to_buf])?;
+
         if self.body.is_some() {
+            // TODO: I think, the body can be written directly to the stream in the end.
             match &self.body {
                 Some(body) => {
-                    bytes_written_to_buf +=
-                        HttpResponse::copy_to_buf(&mut buf, body, bytes_written_to_buf);
+                    writer.write_all(body)?;
                 }
                 None => {}
             }
         }
-        writer.write_all(&buf[0..bytes_written_to_buf])?;
         Ok(())
     }
 }
