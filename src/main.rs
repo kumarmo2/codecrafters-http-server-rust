@@ -176,8 +176,8 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
 struct State {
     directory: Option<String>,
 }
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+fn main() -> anyhow::Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:4221")?;
     let thread_pool = thread_pool::ThreadPoolBuilder {}.build();
     let pool = thread_pool.start();
     let args = std::env::args();
@@ -193,7 +193,6 @@ fn main() {
             Ok(mut _stream) => {
                 let state = state.clone();
                 pool.run(Box::new(move || {
-                    // let response = HttpResponse::default();
                     let request = match HttpRequest::create_from_tcp_stream(&mut _stream) {
                         Ok(req) => req,
                         Err(_) => {
@@ -217,4 +216,5 @@ fn main() {
             }
         }
     }
+    Ok(())
 }

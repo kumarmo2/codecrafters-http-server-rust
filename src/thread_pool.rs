@@ -52,15 +52,27 @@ impl ThreadPool<NotStarted> {
                 let (_, worker_rx) = &pool.worker_chan;
                 let worker_rx = worker_rx.clone();
                 thread::spawn(move || loop {
-                    let item = {
-                        let lock = worker_rx.lock().unwrap();
-                        lock.recv().unwrap()
+                    let item = match worker_rx.lock() {
+                        Ok(guard) => match guard.recv() {
+                            Err(_) => continue,
+                            Ok(item) => item,
+                        },
+                        Err(_) => {
+                            continue;
+                        }
                     };
                     item();
                 });
             }
-            let guard = pool.end_chan.1.lock().unwrap();
-            let _ = guard.recv();
+            loop {
+                let Ok(guard) = pool.end_chan.1.lock() else {
+                    continue;
+                };
+
+                let _ = guard.recv();
+                break;
+            }
+            // let guard = pool.end_chan.1.lock().unwrap();
         });
         ThreadPool {
             _phantom: PhantomData,
