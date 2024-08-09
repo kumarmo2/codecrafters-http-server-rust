@@ -1,7 +1,8 @@
 #![allow(unused_assignments)]
 pub(crate) mod http_request;
+use lazy_static::lazy_static;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io::Write,
     ops::{Deref, DerefMut},
 };
@@ -9,7 +10,13 @@ use thiserror::Error;
 
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "Accept-Encoding";
 pub(crate) const CONTENT_ENCODING_HEADER: &str = "Content-Encoding";
-pub(crate) const SUPPORTED_ENCODINGS: [&str; 1] = ["gzip"];
+lazy_static! {
+    pub(crate) static ref SUPPORTED_ENCODINGS: HashSet<&'static str> = {
+        let mut set = HashSet::new();
+        set.insert("gzip");
+        set
+    };
+}
 
 #[derive(Error, Debug)]
 pub(crate) enum HttpError {

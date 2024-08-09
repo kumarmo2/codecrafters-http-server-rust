@@ -86,11 +86,11 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) -> anyhow::Re
     if response.body.is_none() {
         return Ok(());
     }
-    let client_supported_encoding = val.split(",").map(|v| v.trim()).collect::<Vec<_>>(); // TODO:
-                                                                                          // Can we remove this `Vec` heap allocation.
-    let Some(encoding) = SUPPORTED_ENCODINGS
-        .iter()
-        .find(|e| client_supported_encoding.iter().any(|c| *c == **e))
+
+    let Some(encoding) = val
+        .split(",")
+        .map(|v| v.trim())
+        .find(|v| SUPPORTED_ENCODINGS.contains(*v))
     else {
         return Ok(());
     };
