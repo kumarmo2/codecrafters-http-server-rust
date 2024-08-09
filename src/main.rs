@@ -95,13 +95,16 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) -> anyhow::Re
         return Ok(());
     };
 
+    let Some(body) = response.body.as_ref() else {
+        return Ok(());
+    };
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(body.as_ref())?;
+    let x = encoder.finish()?;
+    response.body = Some(x);
+
     if let Some(headers) = response.header.as_mut() {
         headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
-
-        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(response.body.as_ref().unwrap().as_ref())?;
-        let x = encoder.finish()?;
-        response.body = Some(x);
     } else {
         let mut headers = Headers::new();
         headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
