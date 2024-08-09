@@ -143,7 +143,7 @@ impl HttpResponse {
         }
     }
 
-    fn copy_to_buf(buf: &mut Vec<u8>, from: &[u8], buf_offset: usize) -> usize {
+    fn copy_to_buf(buf: &mut [u8], from: &[u8], buf_offset: usize) -> usize {
         let bytes_to_copy = from.len();
         let end = buf_offset + bytes_to_copy;
         buf[buf_offset..end].copy_from_slice(from);
@@ -154,7 +154,8 @@ impl HttpResponse {
     where
         W: Write,
     {
-        let mut buf: Vec<u8> = vec![0; 8196];
+        let mut buf: [u8; 8196] = [0; 8196]; // NOTE: I think 8 KB should be enough for acting as a
+                                             // buffer for the whole response except for the `body`.
         let mut bytes_written_to_buf: usize = 0;
         let b = b"HTTP/1.1 ";
         buf[0..9].copy_from_slice(b); // 9 bytes.
