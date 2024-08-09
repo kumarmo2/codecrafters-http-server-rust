@@ -113,7 +113,7 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) -> anyhow::Re
     Ok(())
 }
 
-fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
+fn handle_request(req: HttpRequest, state: Arc<State>) -> anyhow::Result<HttpResponse> {
     let path = &req.path;
 
     let response = {
@@ -155,7 +155,7 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
         response.into_inner()
     };
 
-    handle_encoding(&req, &mut response);
+    handle_encoding(&req, &mut response)?;
 
     if let Some(body) = &response.body {
         let body_len = body.len();
@@ -170,7 +170,7 @@ fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
             }
         }
     }
-    response
+    Ok(response)
 }
 
 struct State {
@@ -204,16 +204,24 @@ fn main() -> anyhow::Result<()> {
                             return;
                         }
                     };
-                    let response = handle_request(request, state);
+                    let response = match handle_request(request, state) {
+                        Ok(response) => response,
+                        Err(_) => {
+                            let response = HttpResponseBuilder::new(500).build();
+                            match response.write(&mut _stream) {
+                                Ok(_) => {}
+                                Err(e) => eprintln!("{}", e),
+                            }
+                            return;
+                        }
+                    };
                     match response.write(&mut _stream) {
                         Ok(_) => {}
                         Err(e) => eprintln!("{}", e),
                     }
                 }));
             }
-            Err(e) => {
-                // println!("error: {}", e);
-            }
+            Err(e) => {}
         }
     }
     Ok(())

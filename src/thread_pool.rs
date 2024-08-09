@@ -72,7 +72,6 @@ impl ThreadPool<NotStarted> {
                 let _ = guard.recv();
                 break;
             }
-            // let guard = pool.end_chan.1.lock().unwrap();
         });
         ThreadPool {
             _phantom: PhantomData,
@@ -86,7 +85,7 @@ impl ThreadPool<NotStarted> {
 impl ThreadPool<Started> {
     pub(crate) fn run(&self, f: Job) {
         let (tx, _) = &self.worker_chan;
-        tx.send(f).unwrap();
+        let _ = tx.send(f);
     }
 }
 
