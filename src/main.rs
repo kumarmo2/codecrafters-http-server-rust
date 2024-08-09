@@ -1,12 +1,16 @@
 #![allow(unused_variables)]
 
-use std::{ascii::AsciiExt, net::TcpListener, sync::Arc};
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::io::prelude::*;
+use std::{net::TcpListener, sync::Arc};
 
 use http::{
     http_request::Method, ContentTypeHttpResponse, Headers, HttpResponseBuilder,
     CONTENT_ENCODING_HEADER, SUPPORTED_ENCODINGS,
 };
 use itertools::Itertools;
+use std::io::prelude::*;
 
 use crate::http::{http_request::HttpRequest, HttpResponse};
 mod http;
@@ -80,6 +84,11 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) {
     let Some(val) = headers.get(http::ACCEPT_ENCODING_HEADER) else {
         return;
     };
+    if let None = response.body {
+        return;
+    }
+    // TODO: remove all the todos.
+
     let client_supported_encoding = val.split(",").map(|v| v.trim()).collect::<Vec<_>>(); // TODO:
                                                                                           // Can we remove this `Vec` heap allocation.
     let Some(encoding) = SUPPORTED_ENCODINGS
@@ -97,6 +106,13 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) {
 
     if let Some(headers) = response.header.as_mut() {
         headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(response.body.as_ref().unwrap().as_ref())
+            .unwrap();
+        let x = encoder.finish().unwrap();
+        response.body = Some(x);
     } else {
         let mut headers = Headers::new();
         headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
