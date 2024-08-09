@@ -116,12 +116,12 @@ impl HttpResponseBuilder {
 }
 
 impl HttpResponse {
-    fn get_http_method_contents_to_write(status_code: u16) -> (String, &'static str) {
+    fn get_http_method_contents_to_write(status_code: u16) -> (&'static str, &'static str) {
         match status_code {
-            200 => (200.to_string(), " OK"), //  TODO: if possible, remove the heap allocation for
-            201 => (201.to_string(), " Created"),
-            404 => (404.to_string(), " Not Found"),
-            500 => (500.to_string(), " Internal Server Error"),
+            200 => ("200", " OK"), //  TODO: if possible, remove the heap allocation for
+            201 => ("201", " Created"),
+            404 => ("404", " Not Found"),
+            500 => ("500", " Internal Server Error"),
             // the string
             x => unimplemented!("unhandled status_code: {x}"),
         }
@@ -131,11 +131,9 @@ impl HttpResponse {
     where
         W: Write,
     {
-        // let mut buf: [u8; 512] = [0; 512];
         let mut buf: Vec<u8> = vec![0; 8196];
         let mut bytes_written_to_buf: usize = 0;
         let b = b"HTTP/1.1 ";
-        // println!("b: {:?}", b);
         buf[0..9].copy_from_slice(b); // 9 bytes.
         bytes_written_to_buf += 9;
 

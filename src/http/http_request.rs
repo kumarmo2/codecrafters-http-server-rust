@@ -95,8 +95,6 @@ impl HttpRequest {
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
-        // println!("method: {:?}, buf_len: {len}", method, len = buf.len());
-
         let (rest, _) = skip_whitespaces0(rest).map_err(|_| "error while scaping spaces")?;
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
@@ -125,7 +123,6 @@ impl HttpRequest {
 
         let mut bytes_read_from_header: usize = 0;
         loop {
-            // println!("...., {rest_len}", rest_len = rest.len());
             let (loop_rest, captured_header) =
                 capture_all_till_and_including_crlf(&rest[bytes_read_from_header..])
                     .map_err(|_| "error while capturing header")?;
@@ -162,7 +159,6 @@ impl HttpRequest {
         } else {
             None
         };
-        println!("headers: {:?}", headers);
 
         if request_body_bytes_to_read == 0 {
             return Ok(Self {
@@ -184,28 +180,5 @@ impl HttpRequest {
             headers,
             body: Some(body),
         })
-
-        // nom::bytes::complete::
-        //     .map_err(|e| {
-        //     eprintln!("found error: {}", e);
-        //     "could not fill buf"
-        // })?;
-        // let mut buf = reader.buffer();
-        // let mut bytes_read: usize = 0;
-        // // let buf = reader.fill_buf()?;
-        // let buf_len = buf.len();
-        // let (buf, method) = parse_method(buf).map_err(|e| {
-        //     eprintln!("error while parsing http_method: {}", e);
-        //     "error while parsing http_method"
-        // })?;
-        // println!("method: {:?}", method);
-        // let bytes = method.get_text_bytes();
-        // bytes_read += bytes + 1; // 1 is for the space after the "http method"
-        // {
-        //     reader.consume(bytes_read);
-        // }
-        // let mut buf = &buf[bytes_read..];
-
-        // todo!()
     }
 }

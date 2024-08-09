@@ -10,7 +10,6 @@ use http::{
     CONTENT_ENCODING_HEADER, SUPPORTED_ENCODINGS,
 };
 use itertools::Itertools;
-use std::io::prelude::*;
 
 use crate::http::{http_request::HttpRequest, HttpResponse};
 mod http;
