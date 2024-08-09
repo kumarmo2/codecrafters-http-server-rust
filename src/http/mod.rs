@@ -5,10 +5,25 @@ use std::{
     io::Write,
     ops::{Deref, DerefMut},
 };
+use thiserror::Error;
 
 pub(crate) const ACCEPT_ENCODING_HEADER: &'static str = "Accept-Encoding";
 pub(crate) const CONTENT_ENCODING_HEADER: &'static str = "Content-Encoding";
 pub(crate) const SUPPORTED_ENCODINGS: [&'static str; 1] = ["gzip"];
+
+#[derive(Error, Debug)]
+pub(crate) enum HttpError {
+    #[error("http request version parsing")]
+    HttpVersionParseError,
+    #[error("Inner Error")]
+    Unknown(&'static str),
+    #[error("io error")]
+    IoErr(std::io::Error),
+    #[error("Utf8Error")]
+    Utf8Error(std::str::Utf8Error),
+    #[error("error parsing request")]
+    RequestParsingError(&'static str),
+}
 
 #[derive(Debug)]
 pub(crate) struct Headers {
@@ -118,7 +133,7 @@ impl HttpResponseBuilder {
 impl HttpResponse {
     fn get_http_method_contents_to_write(status_code: u16) -> (&'static str, &'static str) {
         match status_code {
-            200 => ("200", " OK"), //  TODO: if possible, remove the heap allocation for
+            200 => ("200", " OK"),
             201 => ("201", " Created"),
             404 => ("404", " Not Found"),
             500 => ("500", " Internal Server Error"),

@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+use anyhow::Context;
 use core::str;
 use nom::{
     branch::alt,
@@ -13,6 +14,8 @@ use std::{
     net::TcpStream,
     str::FromStr,
 };
+
+use crate::http::HttpError;
 
 use super::Headers;
 
@@ -81,40 +84,48 @@ fn capture_all_till_and_including_termination_character<'a>(
 }
 
 impl HttpRequest {
-    pub(crate) fn create_from_tcp_stream(
-        stream: &mut TcpStream,
-    ) -> Result<HttpRequest, Box<dyn std::error::Error>> {
+    pub(crate) fn create_from_tcp_stream<'a>(
+        stream: &'a mut TcpStream,
+    ) -> Result<HttpRequest, HttpError> {
         let mut reader = BufReader::new(stream);
-        let buf = reader.fill_buf()?;
+        let buf = reader.fill_buf().map_err(|e| HttpError::IoErr(e))?;
         let mut _total_bytes_read: usize = 0;
         let mut bytes_read_from_curr_buff: usize = 0;
 
-        let (rest, method) = parse_method(&buf[bytes_read_from_curr_buff..])
-            .map_err(|_| "error while parsing method")?;
+        let (rest, method) = match parse_method(&buf[bytes_read_from_curr_buff..]) {
+            Ok(r) => r,
+            Err(_) => return Err(HttpError::HttpVersionParseError),
+        };
+
+        // todo!();
+        bytes_read_from_curr_buff = buf.len() - rest.len();
+        _total_bytes_read += bytes_read_from_curr_buff;
+
+        let (rest, _) = skip_whitespaces0(rest)
+            .map_err(|e| HttpError::RequestParsingError("error while scaping spaces"))?;
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
-        let (rest, _) = skip_whitespaces0(rest).map_err(|_| "error while scaping spaces")?;
+        let (rest, path_bytes) = capture_all_till_and_including_space(rest)
+            .map_err(|e| HttpError::RequestParsingError("error while parsing path"))?;
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
-        let (rest, path_bytes) =
-            capture_all_till_and_including_space(rest).map_err(|_| "error while parsing path")?;
+        let path =
+            String::from_str(str::from_utf8(path_bytes).map_err(|e| HttpError::Utf8Error(e))?)
+                .map_err(|e| HttpError::Unknown("unreachable"))?;
 
-        bytes_read_from_curr_buff = buf.len() - rest.len();
-        _total_bytes_read += bytes_read_from_curr_buff;
-
-        let path = String::from_str(str::from_utf8(path_bytes)?)?;
-
-        let (rest, _) = skip_whitespaces0(rest).map_err(|_| "error while scaping spaces")?;
+        let (rest, _) = skip_whitespaces0(rest)
+            .map_err(|e| HttpError::Unknown("error while skip_whitespaces"))
+            .unwrap();
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
         let (rest, _http_version) = capture_all_till_and_including_crlf(rest)
-            .map_err(|_| "error while parsing http version")?;
+            .map_err(|e| HttpError::Unknown("error while capturing all till crlf"))?;
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
@@ -125,7 +136,7 @@ impl HttpRequest {
         loop {
             let (loop_rest, captured_header) =
                 capture_all_till_and_including_crlf(&rest[bytes_read_from_header..])
-                    .map_err(|_| "error while capturing header")?;
+                    .map_err(|e| HttpError::Unknown("error while capturing all till crlf"))?;
 
             bytes_read_from_header = rest.len() - loop_rest.len();
             bytes_read_from_curr_buff = buf.len() - loop_rest.len();
@@ -142,9 +153,16 @@ impl HttpRequest {
                     .unwrap();
             let (header_rest, _) = skip_whitespaces0(header_rest).unwrap();
             let value_bytes = &header_rest[..];
-            let key = String::from_str(str::from_utf8(key_bytes)?)?;
-            let val = String::from_str(str::from_utf8(value_bytes)?)?;
-            // println!("header, key: {key}, val: {val}");
+            let key = String::from_str(
+                str::from_utf8(key_bytes)
+                    .map_err(|e| HttpError::Unknown("error while parsing header key"))?,
+            )
+            .map_err(|e| HttpError::Unknown("Infalling"))?;
+            let val = String::from_str(
+                str::from_utf8(value_bytes)
+                    .map_err(|e| HttpError::Unknown("error while parsing header value"))?,
+            )
+            .map_err(|e| HttpError::Unknown("Infalling"))?;
             headers.insert(key, val);
         }
         let rest = &rest[bytes_read_from_header..];
