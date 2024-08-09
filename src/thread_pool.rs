@@ -11,6 +11,8 @@ pub(crate) struct NotStarted;
 #[derive(Clone)]
 pub(crate) struct Started;
 
+type Job = Box<dyn FnOnce() + Send>;
+
 #[derive(Clone)]
 pub(crate) struct ThreadPool<T> {
     _phantom: PhantomData<T>,
@@ -18,10 +20,7 @@ pub(crate) struct ThreadPool<T> {
     // damn these Arc<Mutex<_>>. they creep everywhere. is this the promise of "Feareless Concurrency" or is it just Skill
     // issue?
     end_chan: (Sender<()>, Arc<Mutex<Receiver<()>>>),
-    worker_chan: (
-        Sender<Box<dyn FnOnce() + Send>>,
-        Arc<Mutex<Receiver<Box<dyn FnOnce() + Send>>>>,
-    ),
+    worker_chan: (Sender<Job>, Arc<Mutex<Receiver<Job>>>),
 }
 
 impl<T> ThreadPool<T> {
@@ -55,8 +54,7 @@ impl ThreadPool<NotStarted> {
                 thread::spawn(move || loop {
                     let item = {
                         let lock = worker_rx.lock().unwrap();
-                        let item = lock.recv().unwrap();
-                        item
+                        lock.recv().unwrap()
                     };
                     item();
                 });
@@ -74,7 +72,7 @@ impl ThreadPool<NotStarted> {
 }
 
 impl ThreadPool<Started> {
-    pub(crate) fn run(&self, f: Box<dyn FnOnce() + Send>) {
+    pub(crate) fn run(&self, f: Job) {
         let (tx, _) = &self.worker_chan;
         tx.send(f).unwrap();
     }

@@ -7,22 +7,24 @@ use std::{
 };
 use thiserror::Error;
 
-pub(crate) const ACCEPT_ENCODING_HEADER: &'static str = "Accept-Encoding";
-pub(crate) const CONTENT_ENCODING_HEADER: &'static str = "Content-Encoding";
-pub(crate) const SUPPORTED_ENCODINGS: [&'static str; 1] = ["gzip"];
+pub(crate) const ACCEPT_ENCODING_HEADER: &str = "Accept-Encoding";
+pub(crate) const CONTENT_ENCODING_HEADER: &str = "Content-Encoding";
+pub(crate) const SUPPORTED_ENCODINGS: [&str; 1] = ["gzip"];
 
 #[derive(Error, Debug)]
 pub(crate) enum HttpError {
     #[error("http request version parsing")]
     HttpVersionParseError,
     #[error("Inner Error")]
-    Unknown(&'static str),
+    Adhoc(&'static str),
     #[error("io error")]
     IoErr(std::io::Error),
     #[error("Utf8Error")]
     Utf8Error(std::str::Utf8Error),
     #[error("error parsing request")]
     RequestParsingError(&'static str),
+    #[error("Invalid Content Length")]
+    InvalidContentLengthInRequest,
 }
 
 #[derive(Debug)]
@@ -164,7 +166,6 @@ impl HttpResponse {
         let (status_code, method_readable_string) =
             HttpResponse::get_http_method_contents_to_write(self.status_code);
 
-        // TODO: before writing the bytes, make sure buf has enough space.
         bytes_written_to_buf +=
             HttpResponse::copy_to_buf(&mut buf, status_code.as_bytes(), bytes_written_to_buf);
 
@@ -176,33 +177,29 @@ impl HttpResponse {
 
         bytes_written_to_buf += HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
 
-        match self.header.as_ref() {
-            Some(header) => {
-                for (k, v) in header.iter() {
-                    let k_bytes = k.as_bytes();
-                    let v_bytes = v.as_bytes();
+        if let Some(header) = self.header.as_ref() {
+            for (k, v) in header.iter() {
+                let k_bytes = k.as_bytes();
+                let v_bytes = v.as_bytes();
 
-                    bytes_written_to_buf +=
-                        HttpResponse::copy_to_buf(&mut buf, k_bytes, bytes_written_to_buf);
+                bytes_written_to_buf +=
+                    HttpResponse::copy_to_buf(&mut buf, k_bytes, bytes_written_to_buf);
 
-                    bytes_written_to_buf +=
-                        HttpResponse::copy_to_buf(&mut buf, b": ", bytes_written_to_buf);
+                bytes_written_to_buf +=
+                    HttpResponse::copy_to_buf(&mut buf, b": ", bytes_written_to_buf);
 
-                    bytes_written_to_buf +=
-                        HttpResponse::copy_to_buf(&mut buf, v_bytes, bytes_written_to_buf);
+                bytes_written_to_buf +=
+                    HttpResponse::copy_to_buf(&mut buf, v_bytes, bytes_written_to_buf);
 
-                    bytes_written_to_buf +=
-                        HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
-                }
+                bytes_written_to_buf +=
+                    HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
             }
-            None => {}
         }
         bytes_written_to_buf += HttpResponse::copy_to_buf(&mut buf, b"\r\n", bytes_written_to_buf);
 
         writer.write_all(&buf[0..bytes_written_to_buf])?;
 
         if self.body.is_some() {
-            // TODO: I think, the body can be written directly to the stream in the end.
             match &self.body {
                 Some(body) => {
                     writer.write_all(body)?;

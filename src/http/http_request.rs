@@ -1,5 +1,4 @@
 #![allow(unused_variables)]
-use anyhow::Context;
 use core::str;
 use nom::{
     branch::alt,
@@ -28,17 +27,7 @@ pub(crate) enum Method {
     Patch,
 }
 
-impl Method {
-    fn get_text_bytes(&self) -> usize {
-        match *self {
-            Method::Get => 3,
-            Method::Post => 4,
-            Method::Put => 3,
-            Method::Delete => 6,
-            Method::Patch => 5,
-        }
-    }
-}
+impl Method {}
 
 pub(crate) struct HttpRequest {
     pub(crate) method: Method,
@@ -60,11 +49,6 @@ fn parse_method(input: &[u8]) -> IResult<&[u8], Method> {
     )(input)
 }
 
-fn parse_path(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    // terminated(take_until(" "), take_while(|c| c == ' ' as u8))(input)
-    terminated(take_until(" "), tag(" "))(input)
-}
-
 fn skip_whitespaces0(input: &[u8]) -> IResult<&[u8], &[u8]> {
     space0(input)
 }
@@ -84,9 +68,7 @@ fn capture_all_till_and_including_termination_character<'a>(
 }
 
 impl HttpRequest {
-    pub(crate) fn create_from_tcp_stream<'a>(
-        stream: &'a mut TcpStream,
-    ) -> Result<HttpRequest, HttpError> {
+    pub(crate) fn create_from_tcp_stream(stream: &mut TcpStream) -> Result<HttpRequest, HttpError> {
         let mut reader = BufReader::new(stream);
         let buf = reader.fill_buf().map_err(|e| HttpError::IoErr(e))?;
         let mut _total_bytes_read: usize = 0;
@@ -97,7 +79,6 @@ impl HttpRequest {
             Err(_) => return Err(HttpError::HttpVersionParseError),
         };
 
-        // todo!();
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
@@ -115,17 +96,16 @@ impl HttpRequest {
 
         let path =
             String::from_str(str::from_utf8(path_bytes).map_err(|e| HttpError::Utf8Error(e))?)
-                .map_err(|e| HttpError::Unknown("unreachable"))?;
+                .map_err(|e| HttpError::Adhoc("unreachable"))?;
 
         let (rest, _) = skip_whitespaces0(rest)
-            .map_err(|e| HttpError::Unknown("error while skip_whitespaces"))
-            .unwrap();
+            .map_err(|e| HttpError::Adhoc("error while skip_whitespaces"))?;
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
 
         let (rest, _http_version) = capture_all_till_and_including_crlf(rest)
-            .map_err(|e| HttpError::Unknown("error while capturing all till crlf"))?;
+            .map_err(|e| HttpError::Adhoc("error while capturing all till crlf"))?;
 
         bytes_read_from_curr_buff = buf.len() - rest.len();
         _total_bytes_read += bytes_read_from_curr_buff;
@@ -136,12 +116,12 @@ impl HttpRequest {
         loop {
             let (loop_rest, captured_header) =
                 capture_all_till_and_including_crlf(&rest[bytes_read_from_header..])
-                    .map_err(|e| HttpError::Unknown("error while capturing all till crlf"))?;
+                    .map_err(|e| HttpError::Adhoc("error while capturing all till crlf"))?;
 
             bytes_read_from_header = rest.len() - loop_rest.len();
             bytes_read_from_curr_buff = buf.len() - loop_rest.len();
             _total_bytes_read += bytes_read_from_curr_buff;
-            if captured_header.len() == 0 {
+            if captured_header.is_empty() {
                 break;
             }
             if captured_header.len() == 2 {
@@ -150,19 +130,23 @@ impl HttpRequest {
             }
             let (header_rest, key_bytes) =
                 capture_all_till_and_including_termination_character(captured_header, b":")
-                    .unwrap();
-            let (header_rest, _) = skip_whitespaces0(header_rest).unwrap();
-            let value_bytes = &header_rest[..];
+                    .map_err(|e| {
+                        HttpError::RequestParsingError("error while capturing all till crlf")
+                    })?;
+            let (header_rest, _) = skip_whitespaces0(header_rest).map_err(|_| {
+                HttpError::RequestParsingError("error while skipping skip_whitespaces0")
+            })?;
+            let value_bytes = header_rest;
             let key = String::from_str(
                 str::from_utf8(key_bytes)
-                    .map_err(|e| HttpError::Unknown("error while parsing header key"))?,
+                    .map_err(|e| HttpError::Adhoc("error while parsing header key"))?,
             )
-            .map_err(|e| HttpError::Unknown("Infalling"))?;
+            .map_err(|e| HttpError::Adhoc("Infalling"))?;
             let val = String::from_str(
                 str::from_utf8(value_bytes)
-                    .map_err(|e| HttpError::Unknown("error while parsing header value"))?,
+                    .map_err(|e| HttpError::Adhoc("error while parsing header value"))?,
             )
-            .map_err(|e| HttpError::Unknown("Infalling"))?;
+            .map_err(|e| HttpError::Adhoc("Infalling"))?;
             headers.insert(key, val);
         }
         let rest = &rest[bytes_read_from_header..];
@@ -171,7 +155,9 @@ impl HttpRequest {
         let headers = if headers.keys().len() > 0 {
             // NOTE: only if `Content-Length` header is present, we will read the body.
             if let Some(val_str) = headers.get("Content-Length") {
-                request_body_bytes_to_read = val_str.parse::<usize>().unwrap(); // TODO: definitely need to remove this unwrap;
+                request_body_bytes_to_read = val_str
+                    .parse::<usize>()
+                    .map_err(|_| HttpError::InvalidContentLengthInRequest)?;
             }
             Some(headers)
         } else {

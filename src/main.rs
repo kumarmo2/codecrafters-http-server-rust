@@ -1,5 +1,5 @@
 #![allow(unused_variables)]
-
+#![deny(clippy::expect_used, clippy::unwrap_used)]
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::io::prelude::*;
@@ -76,47 +76,38 @@ fn handle_file_upload_endpoint(
     }
 }
 
-fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) {
+fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) -> anyhow::Result<()> {
     let Some(headers) = req.headers.as_ref() else {
-        return;
+        return Ok(());
     };
     let Some(val) = headers.get(http::ACCEPT_ENCODING_HEADER) else {
-        return;
+        return Ok(());
     };
-    if let None = response.body {
-        return;
+    if response.body.is_none() {
+        return Ok(());
     }
-    // TODO: remove all the todos.
-
     let client_supported_encoding = val.split(",").map(|v| v.trim()).collect::<Vec<_>>(); // TODO:
                                                                                           // Can we remove this `Vec` heap allocation.
     let Some(encoding) = SUPPORTED_ENCODINGS
         .iter()
-        // .find(|e| e.eq_ignore_ascii_case(client_supported_encoding))
-        .find(|e| {
-            client_supported_encoding
-                .iter()
-                .find(|c| *c == *e)
-                .is_some()
-        })
+        .find(|e| client_supported_encoding.iter().any(|c| *c == **e))
     else {
-        return;
+        return Ok(());
     };
 
     if let Some(headers) = response.header.as_mut() {
         headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
 
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(response.body.as_ref().unwrap().as_ref())
-            .unwrap();
-        let x = encoder.finish().unwrap();
+        encoder.write_all(response.body.as_ref().unwrap().as_ref())?;
+        let x = encoder.finish()?;
         response.body = Some(x);
     } else {
         let mut headers = Headers::new();
         headers.insert(CONTENT_ENCODING_HEADER.to_string(), encoding.to_string());
         response.header = Some(headers);
     }
+    Ok(())
 }
 
 fn handle_request(req: HttpRequest, state: Arc<State>) -> HttpResponse {
