@@ -14,7 +14,7 @@ pub(crate) struct Started;
 type Job = Box<dyn FnOnce() + Send>;
 
 #[derive(Clone)]
-pub(crate) struct ThreadPool<T> {
+pub(crate) struct Inner<T> {
     _phantom: PhantomData<T>,
     capacity: usize,
     // damn these Arc<Mutex<_>>. they creep everywhere. is this the promise of "Feareless Concurrency" or is it just Skill
@@ -23,16 +23,22 @@ pub(crate) struct ThreadPool<T> {
     worker_chan: (Sender<Job>, Arc<Mutex<Receiver<Job>>>),
 }
 
+#[derive(Clone)]
+pub(crate) struct ThreadPool<T> {
+    _inner: Arc<Inner<T>>,
+}
+
 impl<T> ThreadPool<T> {
     fn new(capacity: usize) -> ThreadPool<T> {
         let (tx, rx) = mpsc::channel();
         let (worker_tx, worker_rx) = mpsc::channel();
-        ThreadPool {
+        let _inner = Arc::new(Inner {
             _phantom: PhantomData,
             capacity,
             end_chan: (tx, Arc::new(Mutex::new(rx))),
             worker_chan: (worker_tx, Arc::new(Mutex::new(worker_rx))),
-        }
+        });
+        ThreadPool { _inner }
     }
 }
 
@@ -46,7 +52,7 @@ impl ThreadPoolBuilder {
 
 impl ThreadPool<NotStarted> {
     pub(crate) fn start(&self) -> ThreadPool<Started> {
-        let pool = self.clone();
+        let pool = self._inner.clone();
         let _ = std::thread::spawn(move || {
             for _ in 0..pool.capacity {
                 let (_, worker_rx) = &pool.worker_chan;
@@ -73,24 +79,28 @@ impl ThreadPool<NotStarted> {
                 break;
             }
         });
-        ThreadPool {
+        let pool = self._inner.clone();
+        let _inner = Inner::<Started> {
             _phantom: PhantomData,
-            capacity: self.capacity,
-            end_chan: self.end_chan.clone(),
-            worker_chan: self.worker_chan.clone(),
+            capacity: pool.capacity,
+            end_chan: pool.end_chan.clone(),
+            worker_chan: pool.worker_chan.clone(),
+        };
+        ThreadPool {
+            _inner: Arc::new(_inner),
         }
     }
 }
 
 impl ThreadPool<Started> {
     pub(crate) fn run(&self, f: Job) {
-        let (tx, _) = &self.worker_chan;
+        let (tx, _) = &self._inner.worker_chan;
         let _ = tx.send(f);
     }
 }
 
 impl<T> Drop for ThreadPool<T> {
     fn drop(&mut self) {
-        let _ = self.end_chan.0.send(());
+        let _ = self._inner.end_chan.0.send(());
     }
 }
