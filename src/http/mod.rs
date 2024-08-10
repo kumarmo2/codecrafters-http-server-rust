@@ -1,5 +1,6 @@
 #![allow(unused_assignments)]
 pub(crate) mod http_request;
+use bytes::{Bytes, BytesMut};
 use lazy_static::lazy_static;
 use std::{
     collections::{HashMap, HashSet},
@@ -10,6 +11,7 @@ use thiserror::Error;
 
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "Accept-Encoding";
 pub(crate) const CONTENT_ENCODING_HEADER: &str = "Content-Encoding";
+pub(crate) const EIGHT_KB_IN_BYTES: usize = 8196;
 lazy_static! {
     pub(crate) static ref SUPPORTED_ENCODINGS: HashSet<&'static str> = {
         let mut set = HashSet::new();
@@ -37,6 +39,33 @@ pub(crate) enum HttpError {
 #[derive(Debug)]
 pub(crate) struct Headers {
     map: HashMap<String, String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct HeadersV2 {
+    map: HashMap<Bytes, Bytes>,
+}
+
+impl HeadersV2 {
+    pub(crate) fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+}
+
+impl Deref for HeadersV2 {
+    type Target = HashMap<Bytes, Bytes>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.map
+    }
+}
+
+impl DerefMut for HeadersV2 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.map
+    }
 }
 
 impl Headers {
@@ -90,7 +119,9 @@ impl ContentTypeHttpResponse {
 
 #[derive(Debug)]
 pub(crate) struct HttpResponse {
+    // NOTE:: Use this where you think you need to allocate something on heap.
     status_code: u16,
+    // TODO: Need to migrate to `HeadersV2`
     pub(crate) header: Option<Headers>,
     pub(crate) body: Option<Vec<u8>>, // TODO: see if we can replace body with some type which doesn't need to
                                       // allocate memory on heap.

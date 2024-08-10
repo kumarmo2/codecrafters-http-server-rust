@@ -1,7 +1,10 @@
 #![allow(unused_variables)]
 #![deny(clippy::expect_used, clippy::unwrap_used)]
+use bytes::{Bytes, BytesMut};
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use http::HeadersV2;
+use std::collections::HashMap;
 use std::io::prelude::*;
 use std::{net::TcpListener, sync::Arc};
 
@@ -11,22 +14,22 @@ use http::{
 };
 use itertools::Itertools;
 
-use crate::http::{http_request::HttpRequest, HttpResponse};
+use crate::http::{http_request::HttpRequestV2, HttpResponse};
 mod http;
 mod thread_pool;
 
-fn handle_echo_endpoint(req: &HttpRequest, path_str: &str) -> ContentTypeHttpResponse {
+fn handle_echo_endpoint(req: &HttpRequestV2, path_str: &str) -> ContentTypeHttpResponse {
     let body = path_str.as_bytes().to_vec();
     let response = HttpResponseBuilder::new(200).with_body(body).build();
 
     ContentTypeHttpResponse::PlainText(response)
 }
 
-fn handle_user_agent_endpoint(req: &HttpRequest) -> ContentTypeHttpResponse {
+fn handle_user_agent_endpoint(req: &HttpRequestV2) -> ContentTypeHttpResponse {
     match req.headers.as_ref() {
         Some(headers) => {
-            if let Some(val) = headers.get("User-Agent") {
-                let body = val.as_bytes().to_vec();
+            if let Some(val) = headers.get(&b"User-Agent"[..]) {
+                let body = val.as_ref().to_vec();
                 ContentTypeHttpResponse::PlainText(
                     HttpResponseBuilder::new(200).with_body(body).build(),
                 )
@@ -39,7 +42,7 @@ fn handle_user_agent_endpoint(req: &HttpRequest) -> ContentTypeHttpResponse {
 }
 
 fn handle_file_endpoint(
-    req: &HttpRequest,
+    req: &HttpRequestV2,
     file_name: &str,
     state: Arc<State>,
 ) -> ContentTypeHttpResponse {
@@ -57,7 +60,7 @@ fn handle_file_endpoint(
 }
 
 fn handle_file_upload_endpoint(
-    req: &HttpRequest,
+    req: &HttpRequestV2,
     file_name: &str,
     state: Arc<State>,
 ) -> ContentTypeHttpResponse {
@@ -76,17 +79,19 @@ fn handle_file_upload_endpoint(
     }
 }
 
-fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) -> anyhow::Result<()> {
+fn handle_encoding(req: &HttpRequestV2, response: &mut HttpResponse) -> anyhow::Result<()> {
     let Some(headers) = req.headers.as_ref() else {
         return Ok(());
     };
-    let Some(val) = headers.get(http::ACCEPT_ENCODING_HEADER) else {
+    let Some(val) = headers.get(http::ACCEPT_ENCODING_HEADER.as_bytes()) else {
         return Ok(());
     };
     if response.body.is_none() {
         return Ok(());
     }
 
+    #[allow(clippy::unwrap_used)]
+    let val = std::str::from_utf8(val).unwrap();
     let Some(encoding) = val
         .split(",")
         .map(|v| v.trim())
@@ -113,12 +118,15 @@ fn handle_encoding(req: &HttpRequest, response: &mut HttpResponse) -> anyhow::Re
     Ok(())
 }
 
-fn handle_request(req: HttpRequest, state: Arc<State>) -> anyhow::Result<HttpResponse> {
+fn handle_request(req: HttpRequestV2, state: Arc<State>) -> anyhow::Result<HttpResponse> {
     let path = &req.path;
 
     let response = {
-        let path_splits = path.split("/").collect::<Vec<_>>();
-        // println!("path_splits: {:?}", path_splits);
+        #[allow(clippy::unwrap_used)]
+        let path_splits = std::str::from_utf8(path.as_ref())
+            .unwrap()
+            .split("/")
+            .collect::<Vec<_>>();
 
         if path_splits.len() >= 3 && path_splits[1] == "echo" {
             // `3` is given assuming the path
@@ -193,7 +201,7 @@ fn main() -> anyhow::Result<()> {
             Ok(mut _stream) => {
                 let state = state.clone();
                 pool.run(Box::new(move || {
-                    let request = match HttpRequest::create_from_tcp_stream(&mut _stream) {
+                    let request = match HttpRequestV2::create_from_tcp_stream(&mut _stream) {
                         Ok(req) => req,
                         Err(_) => {
                             let response = HttpResponseBuilder::new(500).build();
