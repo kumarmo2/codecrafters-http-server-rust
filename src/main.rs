@@ -1,10 +1,8 @@
 #![allow(unused_variables)]
 #![deny(clippy::expect_used, clippy::unwrap_used)]
-use bytes::{Bytes, BytesMut};
+
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use http::HeadersV2;
-use std::collections::HashMap;
 use std::io::prelude::*;
 use std::{net::TcpListener, sync::Arc};
 
@@ -200,7 +198,7 @@ fn main() -> anyhow::Result<()> {
         match stream {
             Ok(mut _stream) => {
                 let state = state.clone();
-                pool.run(Box::new(move || {
+                pool.run(move || {
                     let request = match HttpRequestV2::create_from_tcp_stream(&mut _stream) {
                         Ok(req) => req,
                         Err(_) => {
@@ -227,7 +225,7 @@ fn main() -> anyhow::Result<()> {
                         Ok(_) => {}
                         Err(e) => eprintln!("{}", e),
                     }
-                }));
+                });
             }
             Err(e) => {}
         }

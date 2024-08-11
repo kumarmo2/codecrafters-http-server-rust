@@ -11,25 +11,32 @@ pub(crate) struct NotStarted;
 #[derive(Clone)]
 pub(crate) struct Started;
 
-type Job = Box<dyn FnOnce() + Send>;
-
 #[derive(Clone)]
-pub(crate) struct Inner<T> {
-    _phantom: PhantomData<T>,
+pub(crate) struct Inner<T, State>
+where
+    T: FnOnce() + Send + 'static,
+{
+    _phantom: PhantomData<State>,
     capacity: usize,
     // damn these Arc<Mutex<_>>. they creep everywhere. is this the promise of "Feareless Concurrency" or is it just Skill
     // issue?
     end_chan: (Sender<()>, Arc<Mutex<Receiver<()>>>),
-    worker_chan: (Sender<Job>, Arc<Mutex<Receiver<Job>>>),
+    worker_chan: (Sender<T>, Arc<Mutex<Receiver<T>>>),
 }
 
 #[derive(Clone)]
-pub(crate) struct ThreadPool<T> {
-    _inner: Arc<Inner<T>>,
+pub(crate) struct ThreadPool<T, State>
+where
+    T: FnOnce() + Send + 'static,
+{
+    _inner: Arc<Inner<T, State>>,
 }
 
-impl<T> ThreadPool<T> {
-    fn new(capacity: usize) -> ThreadPool<T> {
+impl<T, State> ThreadPool<T, State>
+where
+    T: FnOnce() + Send + 'static,
+{
+    fn new(capacity: usize) -> ThreadPool<T, State> {
         let (tx, rx) = mpsc::channel();
         let (worker_tx, worker_rx) = mpsc::channel();
         let _inner = Arc::new(Inner {
@@ -45,13 +52,19 @@ impl<T> ThreadPool<T> {
 pub(crate) struct ThreadPoolBuilder {}
 
 impl ThreadPoolBuilder {
-    pub(crate) fn build(&self) -> ThreadPool<NotStarted> {
-        ThreadPool::new(8)
+    pub(crate) fn build<T>(&self) -> ThreadPool<T, NotStarted>
+    where
+        T: FnOnce() + Send + 'static,
+    {
+        ThreadPool::<T, NotStarted>::new(8)
     }
 }
 
-impl ThreadPool<NotStarted> {
-    pub(crate) fn start(&self) -> ThreadPool<Started> {
+impl<T> ThreadPool<T, NotStarted>
+where
+    T: FnOnce() + Send + 'static,
+{
+    pub(crate) fn start(&self) -> ThreadPool<T, Started> {
         let pool = self._inner.clone();
         let _ = std::thread::spawn(move || {
             for _ in 0..pool.capacity {
@@ -80,7 +93,7 @@ impl ThreadPool<NotStarted> {
             }
         });
         let pool = self._inner.clone();
-        let _inner = Inner::<Started> {
+        let _inner = Inner::<T, Started> {
             _phantom: PhantomData,
             capacity: pool.capacity,
             end_chan: pool.end_chan.clone(),
@@ -92,14 +105,20 @@ impl ThreadPool<NotStarted> {
     }
 }
 
-impl ThreadPool<Started> {
-    pub(crate) fn run(&self, f: Job) {
+impl<T> ThreadPool<T, Started>
+where
+    T: FnOnce() + Send + 'static,
+{
+    pub(crate) fn run(&self, f: T) {
         let (tx, _) = &self._inner.worker_chan;
         let _ = tx.send(f);
     }
 }
 
-impl<T> Drop for ThreadPool<T> {
+impl<T, State> Drop for ThreadPool<T, State>
+where
+    T: FnOnce() + Send + 'static,
+{
     fn drop(&mut self) {
         let _ = self._inner.end_chan.0.send(());
     }

@@ -11,7 +11,8 @@ use thiserror::Error;
 
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "Accept-Encoding";
 pub(crate) const CONTENT_ENCODING_HEADER: &str = "Content-Encoding";
-pub(crate) const EIGHT_KB_IN_BYTES: usize = 8196;
+pub(crate) const EIGHT_KB_IN_BYTES: usize = 8192;
+
 lazy_static! {
     pub(crate) static ref SUPPORTED_ENCODINGS: HashSet<&'static str> = {
         let mut set = HashSet::new();
